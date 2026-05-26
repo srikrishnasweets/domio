@@ -769,6 +769,8 @@
         let masterData = [];
         let allInventoryData = [];
         let currentEditRowIndex = null;
+        let currentNormalMRP = "";
+        let currentAirportMRP = "";
 
         // DOM Elements
         const filterDateInput = document.getElementById('filterDate');
@@ -806,9 +808,31 @@
             // Set default MFD
             mfdInput.value = today;
 
-            // USP calculation listeners
-            if (mrpInput) mrpInput.addEventListener('input', calculateUSP);
+            // USP and MRP state tracking
+            if (mrpInput) {
+                mrpInput.addEventListener('input', () => {
+                    const airportCheckbox = document.getElementById('airport');
+                    if (airportCheckbox && airportCheckbox.checked) {
+                        currentAirportMRP = mrpInput.value;
+                    } else {
+                        currentNormalMRP = mrpInput.value;
+                    }
+                    calculateUSP();
+                });
+            }
             if (weightInput) weightInput.addEventListener('input', calculateUSP);
+
+            const airportCheckbox = document.getElementById('airport');
+            if (airportCheckbox) {
+                airportCheckbox.addEventListener('change', () => {
+                    if (airportCheckbox.checked) {
+                        mrpInput.value = currentAirportMRP;
+                    } else {
+                        mrpInput.value = currentNormalMRP;
+                    }
+                    mrpInput.dispatchEvent(new Event('input'));
+                });
+            }
 
             // Load data
             loadMasterData();
@@ -849,6 +873,8 @@
             mfdInput.value = new Date().toISOString().split('T')[0];
             resetImagePreview();
             currentEditRowIndex = null;
+            currentNormalMRP = "";
+            currentAirportMRP = "";
             document.querySelector('#entryModal h2').textContent = 'Add New Entry';
             document.getElementById('btnText').textContent = 'Save Entry';
             document.getElementById('entryModal').classList.add('active');
@@ -878,7 +904,33 @@
             document.getElementById('weight').value = item.Weight || '';
             document.getElementById('usp').value = item.USP || '';
             document.getElementById('batch').value = item.Batch || '';
-            document.getElementById('airport').checked = item.Airport === true || item.Airport === 'TRUE';
+            
+            const isAirport = item.Airport === true || item.Airport === 'TRUE';
+            document.getElementById('airport').checked = isAirport;
+            
+            // Search masterData for a match to initialize MRP state variables
+            const codeVal = (item.Code || '').toString().trim().toLowerCase();
+            const productVal = (item.Product || '').toString().trim().toLowerCase();
+            let match = null;
+            if (codeVal) {
+                match = masterData.find(m => (m.Code || '').toString().trim().toLowerCase() === codeVal);
+            }
+            if (!match && productVal) {
+                match = masterData.find(m => (m.Product || '').toString().trim().toLowerCase() === productVal);
+            }
+            
+            if (match) {
+                currentNormalMRP = match.MRP || '';
+                currentAirportMRP = match.Airport || '';
+            } else {
+                if (isAirport) {
+                    currentAirportMRP = item.MRP || '';
+                    currentNormalMRP = '';
+                } else {
+                    currentNormalMRP = item.MRP || '';
+                    currentAirportMRP = '';
+                }
+            }
             
             let mfdStr = '';
             if (item.MFD) {
@@ -1059,6 +1111,8 @@
                 ubd: formData.get('ubd'),
                 batch: formData.get('batch'),
                 airport: document.getElementById('airport').checked,
+                masterMRP: currentNormalMRP,
+                masterAirport: currentAirportMRP,
                 image: null,
                 action: currentEditRowIndex ? 'edit' : 'add',
                 rowIndex: currentEditRowIndex
@@ -1290,12 +1344,28 @@
             if (match.Code) document.getElementById('code').value = match.Code;
             if (match.Product) document.getElementById('product').value = match.Product;
             if (match.Variant) document.getElementById('variant').value = match.Variant;
-            if (match.MRP) {
-                const mrpField = document.getElementById('mrp');
-                if (mrpField) {
-                    mrpField.value = match.MRP;
-                    mrpField.dispatchEvent(new Event('input'));
+            
+            // Set weight
+            const weightField = document.getElementById('weight');
+            if (weightField) {
+                weightField.value = match.Weight || "";
+                weightField.dispatchEvent(new Event('input'));
+            }
+            
+            // Cache MRPs
+            currentNormalMRP = match.MRP || "";
+            currentAirportMRP = match.Airport || "";
+            
+            // Populate MRP field based on active Airport toggle state
+            const mrpField = document.getElementById('mrp');
+            const airportCheckbox = document.getElementById('airport');
+            if (mrpField && airportCheckbox) {
+                if (airportCheckbox.checked) {
+                    mrpField.value = currentAirportMRP;
+                } else {
+                    mrpField.value = currentNormalMRP;
                 }
+                mrpField.dispatchEvent(new Event('input'));
             }
         }
 
